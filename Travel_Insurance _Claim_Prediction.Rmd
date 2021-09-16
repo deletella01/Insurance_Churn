@@ -3,9 +3,9 @@ title: "Travel Insurance Claim Prediction Analysis"
 author: "Bamidele Tella"
 date: "9/5/2021"
 output:
+  pdf_document: default
   html_document:
     df_print: paged
-  pdf_document: default
 ---
 
 ```{r setup, include=FALSE,warning=FALSE}
@@ -34,7 +34,7 @@ library(caret)
 library(rpart)
 library(randomForest)
 library(ggcorrplot)
-library(ggplot2)
+library(ggplot2) 
 library(GGally)
 library(data.table)
 library(MLmetrics)
