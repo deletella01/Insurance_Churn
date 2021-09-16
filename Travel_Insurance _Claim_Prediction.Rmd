@@ -1,0 +1,311 @@
+---
+title: "Travel Insurance Claim Prediction Analysis"
+author: "Bamidele Tella"
+date: "9/5/2021"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE,warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Overview
+Travel insurance is a type of insurance that covers the costs and losses associated with traveling. It is useful protection for those traveling domestically or abroad.
+
+Many companies selling tickets or travel packages, give consumers the option to purchase travel insurance, also known as travelers insurance. Some travel policies cover damage to personal property, rented equipment, such as rental cars, or even the cost of paying a ransom. 
+
+### Problem Statement
+As a data scientist in an insurance company in the USA. The company has collected the data of earlier travel insurance buyers. In this season of vacation, the company wants to know which person will claim their travel insurance and who will not. The company has chosen you to apply your Machine Learning knowledge and provide them with a model that achieves this vision.
+
+### Objective
+You are responsible for building a machine learning model for the insurance company to predict if the insurance buyer will claim their travel insurance or not.
+
+Evaluation Criteria
+Submissions are evaluated using F1 Score.
+
+### Package Importation
+First, we import the required packages, that would aid this analysis
+
+```{r, warning=FALSE,message=FALSE}
+library(caret)
+library(rpart)
+library(randomForest)
+library(ggcorrplot)
+library(ggplot2)
+library(GGally)
+library(data.table)
+library(MLmetrics)
+```
+
+### Loading Dataset
+First,I load the data set from my local directory. 
+```{r}
+train <- read.csv("~/R Studio/Dataset/Churn Data/train.csv")
+test <- read.csv("~/R Studio/Dataset/Churn Data/test.csv")
+str(train)
+```
+## Cleaning the Data
+### Handling Missing values
+For the gender, I name the missing values 'Unspecified'.
+I make some reassignment during analysis to serve as a restore point. Then I perform some Exploratory Data Analysis to view what we are working with.
+
+```{r,warning=FALSE,message=FALSE}
+train$Gender[train$Gender==""] <- "Unspecified"
+test$Gender[test$Gender==""] <- "Unspecified"
+
+trainData2 <- train
+testData2 <- test
+print(table(trainData2$Claim))
+trainData2$Claim <- as.factor(trainData2$Claim)
+trainData2$Gender <- as.factor(trainData2$Gender)
+
+ggplot1 <- ggplot(trainData2, aes(Claim)) + geom_histogram(stat="count")
+ggplot1
+```
+From the above plot, we can see that our target column is imbalanced. Now I take a look at our Data with the different individual ages.
+
+Next I view the Net Sales according to individual age range.
+```{r,warning=FALSE,message=FALSE}
+ ggplot2 = ggplot(trainData2,aes(Age, Net.Sales)) + geom_point(aes(col=Gender))
+ ggplot2 = ggplot2 + geom_smooth(method = lm)
+ ggplot2
+
+```
+We can see that the people within the age range of about 25 to about 80 are most likely going to purchase a travel insurance. Most importantly, we see that there is a wild range of outliers in the data which needs to be amended.
+
+
+### Feature Selection
+I decided to remove the Agency Type, Distribution Channel, Product Name and Destination 
+as I did not see how it affected a customer claiming an insurance.
+
+```{r}
+trainData2 <- trainData2[, -c(2,3,4,6)]   
+testData2 <- testData2[, -c(2,3,4,6)]
+head(trainData2)
+```
+
+Next I perform some feature engineering like converting categorical data to numeric 
+values that can be interpreted by R.
+```{r}
+unique_agency <- unique(trainData2$Agency)
+unique_gender <- unique(trainData2$Gender)
+label_matrix <- matrix(0,nrow = nrow(trainData2),ncol = length(c(unique_agency,unique_gender))) 
+colnames(label_matrix) <- c(unique_agency,as.character(unique_gender))
+label_matrix <- as.data.frame(label_matrix)
+
+train_labels <- cbind(trainData2,label_matrix)
+
+for (i in 1:nrow(trainData2)) {      
+  for (j in colnames(train_labels)){
+    if(train_labels[i,1]==j){
+      train_labels[i,j] <- 1  
+    }
+  }
+}
+
+for (i3 in 1:nrow(trainData2)){
+  for (j3 in colnames(train_labels)){ 
+    if(train_labels[i3, 5]==j3){
+      train_labels[i3,j3] <- 1
+    }
+  }
+}
+
+head(train_labels)
+
+train_labels2 <- train_labels
+train_labels2 <- train_labels2[,-c(1,5)]  # The relabeled columns were removed (Agency Type, Gender).
+```
+
+### Handling Outliers
+Next, I replaced outliers with values in between the first and third quadrant in the Duration and Net Sales columns. The values were gotten from the statistical summary of the original data.
+
+```{r}
+for(i4 in 1:nrow(train_labels2)){    
+  if(train_labels2[i4,1]<9.00){     
+    train_labels2[i4,1] <- 9.00 
+  }else if(train_labels2[i4,1]>53.00){
+    train_labels2[i4,1] <- 53.00    
+  }else{
+      
+  }
+}
+
+for(i4 in 1:nrow(train_labels2)){    
+  if(train_labels2[i4,4]<18){     
+    train_labels2[i4,4] <- 18 
+  }else if(train_labels2[i4,4]>85){
+    train_labels2[i4,4] <- 85    
+  }else{
+      
+  }
+}
+
+for(i5 in 1:nrow(train_labels2)){
+  if(train_labels2[i5,2]<18.00){  
+    train_labels2[i5,2] <- 18.00  
+  }else if(train_labels2[i5,2]>48.00){
+    train_labels2[i5,2] <- 48.00   
+  }else{
+  }
+}
+```
+
+Then I convert the Target column to category(Factor),Age column to Numeric, Agencies and Genders
+columns into Categorical Columns indicating 1 for 'Yes',and 0 for 'No'.
+
+```{r}
+train_labels2$Age <- as.numeric(train_labels2$Age)
+colnames(train_labels2) <- make.names(colnames(train_labels2),unique = T) 
+
+train_labels3 <- train_labels2  
+
+for(i6 in c(6:ncol(train_labels3))){     
+  train_labels3[,i6] <- as.factor(train_labels3[,i6])   
+}
+summary(train_labels3)
+```
+Now we take a look at what age range are more likely to claim the insurance and how the target column imbalance affects the different Gender of people that claimed their travel insurance.
+
+```{r, warning=FALSE}
+ggplot3 <-  ggplot(train_labels3, aes(Claim,Age), fill= Claim)+ geom_bar(stat='identity') + ylim(c(15, 100))
+ggplot3
+```
+
+Next, I take a look at the correlation between Duration of the insurance purchased by the different individuals, Net Sales of Insurance, Commission in value of each individual, and the different Ages of the different individuals.
+```{r}
+corr = cor(train_labels3[c(1,2,3,4)])
+ggcorrplot(corr, method = "square", type="lower")
+```
+
+## Modelling and Evaluation
+Next, I develop multiple models and decide the best using the Confusion Matrix and F1_Score.
+
+### Data Split into Training and Evaluation Set
+```{r}
+set.seed(12)
+intrain <- createDataPartition(train_labels3$Claim, p=0.6,list = F)  
+trainer <- train_labels3[intrain,]   
+val <- train_labels3[-intrain,]   
+```
+
+### Decision Tree
+```{r, warning=FALSE}
+fit.rpart <- train(Claim~.,data=trainer,method="rpart")
+pred.rpart <- predict(fit.rpart, newdata=val)
+confusionMatrix(pred.rpart,val$Claim)        
+F1_Score(y_true = val$Claim, y_pred = pred.rpart)   
+```
+
+### Random Forest
+```{r,warning=FALSE}
+fit.rf2 <- randomForest(Claim ~ ., data=trainer, proximity = F) 
+rfpred3 <- predict(fit.rf2, newdata=val, type = "response")     
+confusionMatrix(rfpred3,val$Claim)    
+F1_Score(y_true = val$Claim,y_pred = rfpred3)
+```
+
+### Generalised Linear Model
+```{r, warning=FALSE}
+gfit3 <- glm(Claim ~ ., data = trainer, family = "binomial"(link = 'logit'))  
+gpred2 <- predict(gfit3, newdata = val, type = "response")  
+table(val$Claim, gpred2 >= 0.5)    
+```
+
+### Latent Diriclet Allocation Model
+```{r, warning=FALSE}
+lda.fit <- train(Claim~.,method="lda",data=trainer) 
+pred.lda <- predict(lda.fit,newdata=val)          
+confusionMatrix(pred.lda,val$Claim )              
+F1_Score(y_true = val$Claim, y_pred=pred.lda)     
+```
+
+## Prediction of Test Data
+The Latent Dirichlet Allocation (LDA) model among all models has a better sensitivity to the data set's imbalance and its also more specific. Hence, we use this model for prediction of the test data. 
+To attain reasonable results, we must clean up the test data and perform feature engineering
+as we did for the train data. Then we predict with our resulting test Data. 
+
+### Feature Selection
+```{r}
+test_agency <- unique(testData2$Agency)
+test_gender <- unique(testData2$Gender)        
+test_matrix <- matrix(0, nrow = nrow(testData2), ncol = length(c(test_agency,test_gender)))    
+colnames(test_matrix) <- c(test_agency,test_gender) 
+test_matrix <- as.data.frame(test_matrix)    
+test_encode <- cbind(testData2,test_matrix)  
+
+for (u in 1:nrow(testData2)) {
+  for (v in colnames(test_encode)){   
+    if(test_encode[u,1]==v){          
+      test_encode[u,v] <- 1           
+    }
+  }
+}
+for (u3 in 1:nrow(testData2)) {
+  for (v3 in colnames(test_encode)){        
+    if(test_encode[u3,5]==v3){              
+      test_encode[u3,v3] <- 1               
+    }
+  }
+}
+
+test_encode2 <- test_encode                 
+test_encode2 <- test_encode2[,-c(1,5)]   
+summary(test_encode2)
+```
+
+### Handling Outliers
+```{r}
+for(u4 in 1:nrow(test_encode2)){        
+  if(test_encode2[u4,1]<9.00){          
+    test_encode2[u4,1] <- 9.00          
+  }else if(test_encode2[u4,1]>53.00){   
+    test_encode2[u4,1] <- 53.00         
+  }else{
+    
+  }
+}
+
+for(i4 in 1:nrow(test_encode2)){    
+  if(test_encode2[i4,4]<18){     
+    test_encode2[i4,4] <- 18 
+  }else if(test_encode2[i4,4]>85){
+    test_encode2[i4,4] <- 85    
+  }else{
+      
+  }
+}
+
+for(u5 in 1:nrow(test_encode2)){        
+  if(test_encode2[u5,2]<18.00){         
+    test_encode2[u5,2] <- 18.00         
+  }else if(test_encode2[u5,2]>48.00){   
+    test_encode2[u5,2] <- 48.00         
+  }else{
+
+  }
+}
+```
+
+### Classification and Prediction
+```{r}
+test_encode2$Age <- as.numeric(test_encode2$Age)         
+colnames(test_encode2) <- make.names(colnames(test_encode2),unique = T)  
+test_encode3 <- test_encode2                
+for(u6 in c(5:ncol(test_encode3))) {                 
+  test_encode3[,u6] <- as.factor(test_encode3[,u6])  
+}
+```
+### Final Prediction
+```{r}
+finalpred2 <- predict(lda.fit,newdata=test_encode3)         
+finalpred2 <- as.data.frame(finalpred2,stringsAsFactors=F )
+colnames(finalpred2) <- "prediction"
+table(finalpred2$prediction)
+ 
+write.csv(finalpred2,"./Final_Prediction2.csv",row.names = F)
+```
+
