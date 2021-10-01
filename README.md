@@ -5,3 +5,4 @@ This project involves building a machine learning model for the insurance compan
 This project can also be viewed on R Publication Website
 https://rpubs.com/Deletella01/809699
 
+Data set from Dphi Tech - https://dphi.tech/challenges/travel-insurance-claim-prediction/49/data
